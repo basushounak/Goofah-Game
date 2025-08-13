@@ -1,0 +1,298 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pokémon Battle Simulator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+  <div class="container mx-auto p-4 max-w-4xl">
+    <!-- Selection Screen -->
+    <div id="selection-screen" class="min-h-screen flex flex-col items-center justify-center">
+      <h1 class="text-3xl font-bold mb-6 text-center">Pokémon Battle Simulator</h1>
+      <div class="w-full max-w-md bg-white p-6 rounded-lg shadow-md">
+        <div class="mb-4">
+          <label for="pokemon1" class="block text-lg font-medium mb-2">Select Pokémon 1</label>
+          <select id="pokemon1" class="w-full p-2 border rounded-md">
+            <option value="">Select a Pokémon</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label for="pokemon2" class="block text-lg font-medium mb-2">Select Pokémon 2</label>
+          <select id="pokemon2" class="w-full p-2 border rounded-md">
+            <option value="">Select a Pokémon</option>
+          </select>
+        </div>
+        <button id="start-battle" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600 disabled:bg-gray-400" disabled>Start Battle</button>
+      </div>
+    </div>
+
+    <!-- Results Screen -->
+    <div id="results-screen" class="hidden min-h-screen flex flex-col items-center">
+      <h1 class="text-3xl font-bold mb-6 text-center">Battle Results</h1>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-4xl mb-6">
+        <!-- Pokémon 1 Card -->
+        <div id="pokemon1-card" class="bg-white p-4 rounded-lg shadow-md text-center">
+          <h2 class="text-xl font-bold"></h2>
+          <img class="mx-auto w-32 h-32" alt="Pokémon sprite">
+          <p class="text-sm"><strong>Type:</strong> <span></span></p>
+          <p class="text-sm"><strong>HP:</strong> <span></span></p>
+          <p class="text-sm"><strong>Attack:</strong> <span></span></p>
+          <p class="text-sm"><strong>Defense:</strong> <span></span></p>
+          <p class="text-sm"><strong>Sp. Attack:</strong> <span></span></p>
+          <p class="text-sm"><strong>Sp. Defense:</strong> <span></span></p>
+          <p class="text-sm"><strong>Speed:</strong> <span></span></p>
+        </div>
+        <!-- Pokémon 2 Card -->
+        <div id="pokemon2-card" class="bg-white p-4 rounded-lg shadow-md text-center">
+          <h2 class="text-xl font-bold"></h2>
+          <img class="mx-auto w-32 h-32" alt="Pokémon sprite">
+          <p class="text-sm"><strong>Type:</strong> <span></span></p>
+          <p class="text-sm"><strong>HP:</strong> <span></span></p>
+          <p class="text-sm"><strong>Attack:</strong> <span></span></p>
+          <p class="text-sm"><strong>Defense:</strong> <span></span></p>
+          <p class="text-sm"><strong>Sp. Attack:</strong> <span></span></p>
+          <p class="text-sm"><strong>Sp. Defense:</strong> <span></span></p>
+          <p class="text-sm"><strong>Speed:</strong> <span></span></p>
+        </div>
+      </div>
+      <div class="w-full max-w-4xl bg-white p-4 rounded-lg shadow-md">
+        <h3 class="text-lg font-bold mb-2">Battle Log</h3>
+        <div id="battle-log" class="text-sm"></div>
+        <h3 id="winner" class="text-lg font-bold mt-4"></h3>
+      </div>
+      <button id="reset-battle" class="mt-6 bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">New Battle</button>
+    </div>
+  </div>
+
+  <script>
+    // Default moves based on primary type
+    const moveData = {
+      fire: { name: "Flamethrower", type: "fire", power: 90, accuracy: 100, isSpecial: true },
+      water: { name: "Water Gun", type: "water", power: 40, accuracy: 100, isSpecial: true },
+      grass: { name: "Vine Whip", type: "grass", power: 45, accuracy: 100, isSpecial: false },
+      electric: { name: "Thunderbolt", type: "electric", power: 90, accuracy: 100, isSpecial: true },
+      psychic: { name: "Psychic", type: "psychic", power: 90, accuracy: 100, isSpecial: true },
+      normal: { name: "Tackle", type: "normal", power: 40, accuracy: 100, isSpecial: false },
+      fighting: { name: "Karate Chop", type: "fighting", power: 50, accuracy: 100, isSpecial: false },
+      poison: { name: "Poison Sting", type: "poison", power: 15, accuracy: 100, isSpecial: false },
+      ground: { name: "Earthquake", type: "ground", power: 100, accuracy: 100, isSpecial: false },
+      flying: { name: "Wing Attack", type: "flying", power: 60, accuracy: 100, isSpecial: false },
+      bug: { name: "Bug Bite", type: "bug", power: 60, accuracy: 100, isSpecial: false },
+      rock: { name: "Rock Throw", type: "rock", power: 50, accuracy: 90, isSpecial: false },
+      ghost: { name: "Shadow Ball", type: "ghost", power: 80, accuracy: 100, isSpecial: true },
+      dragon: { name: "Dragon Claw", type: "dragon", power: 80, accuracy: 100, isSpecial: false },
+      dark: { name: "Bite", type: "dark", power: 60, accuracy: 100, isSpecial: false },
+      steel: { name: "Metal Claw", type: "steel", power: 50, accuracy: 95, isSpecial: false },
+      ice: { name: "Ice Beam", type: "ice", power: 90, accuracy: 100, isSpecial: true },
+      fairy: { name: "Dazzling Gleam", type: "fairy", power: 80, accuracy: 100, isSpecial: true }
+    };
+
+    // Load Pokémon data from JSON
+    let pokemonData = [];
+    fetch('./pokemon.json')
+      .then(response => response.json())
+      .then(data => {
+        pokemonData = data;
+        populatePokemonSelects();
+      })
+      .catch(error => console.error('Error loading Pokémon data:', error));
+
+    // Populate Pokémon selection dropdowns
+    function populatePokemonSelects() {
+      const select1 = document.getElementById('pokemon1');
+      const select2 = document.getElementById('pokemon2');
+      pokemonData.forEach(pokemon => {
+        const option = document.createElement('option');
+        option.value = pokemon.pokedex_number;
+        option.textContent = pokemon.name;
+        select1.appendChild(option.cloneNode(true));
+        select2.appendChild(option);
+      });
+    }
+
+    // Enable/disable start battle button
+    document.getElementById('pokemon1').addEventListener('change', checkSelections);
+    document.getElementById('pokemon2').addEventListener('change', checkSelections);
+
+    function checkSelections() {
+      const pokemon1 = document.getElementById('pokemon1').value;
+      const pokemon2 = document.getElementById('pokemon2').value;
+      document.getElementById('start-battle').disabled = !(pokemon1 && pokemon2);
+    }
+
+    // Start battle
+    document.getElementById('start-battle').addEventListener('click', async () => {
+      const pokemon1Id = document.getElementById('pokemon1').value;
+      const pokemon2Id = document.getElementById('pokemon2').value;
+      if (pokemon1Id === pokemon2Id) {
+        alert('Please select different Pokémon');
+        return;
+      }
+      const pokemon1 = pokemonData.find(p => p.pokedex_number == pokemon1Id);
+      const pokemon2 = pokemonData.find(p => p.pokedex_number == pokemon2Id);
+
+      // Fetch sprites from PokéAPI
+      const sprite1 = await fetchSprite(pokemon1.pokedex_number);
+      const sprite2 = await fetchSprite(pokemon2.pokedex_number);
+
+      // Display results
+      displayResults(pokemon1, pokemon2, sprite1, sprite2);
+      const battleLog = simulateBattle(pokemon1, pokemon2);
+      displayBattleLog(battleLog);
+
+      // Switch screens
+      document.getElementById('selection-screen').classList.add('hidden');
+      document.getElementById('results-screen').classList.remove('hidden');
+    });
+
+    // Fetch Pokémon sprite from PokéAPI
+    async function fetchSprite(pokedexNumber) {
+      try {
+        const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokedexNumber}`);
+        const data = await response.json();
+        return data.sprites.front_default;
+      } catch (error) {
+        console.error('Error fetching sprite:', error);
+        return 'https://via.placeholder.com/128'; // Fallback image
+      }
+    }
+
+    // Display Pokémon cards
+    function displayResults(pokemon1, pokemon2, sprite1, sprite2) {
+      const card1 = document.getElementById('pokemon1-card');
+      const card2 = document.getElementById('pokemon2-card');
+
+      card1.querySelector('h2').textContent = pokemon1.name;
+      card1.querySelector('img').src = sprite1;
+      card1.querySelector('p:nth-child(3) span').textContent = `${pokemon1.type1}${pokemon1.type2 !== 'null' ? '/' + pokemon1.type2 : ''}`;
+      card1.querySelector('p:nth-child(4) span').textContent = pokemon1.hp;
+      card1.querySelector('p:nth-child(5) span').textContent = pokemon1.attack;
+      card1.querySelector('p:nth-child(6) span').textContent = pokemon1.defense;
+      card1.querySelector('p:nth-child(7) span').textContent = pokemon1.sp_attack;
+      card1.querySelector('p:nth-child(8) span').textContent = pokemon1.sp_defense;
+      card1.querySelector('p:nth-child(9) span').textContent = pokemon1.speed;
+
+      card2.querySelector('h2').textContent = pokemon2.name;
+      card2.querySelector('img').src = sprite2;
+      card2.querySelector('p:nth-child(3) span').textContent = `${pokemon2.type1}${pokemon2.type2 !== 'null' ? '/' + pokemon2.type2 : ''}`;
+      card2.querySelector('p:nth-child(4) span').textContent = pokemon2.hp;
+      card2.querySelector('p:nth-child(5) span').textContent = pokemon2.attack;
+      card2.querySelector('p:nth-child(6) span').textContent = pokemon2.defense;
+      card2.querySelector('p:nth-child(7) span').textContent = pokemon2.sp_attack;
+      card2.querySelector('p:nth-child(8) span').textContent = pokemon2.sp_defense;
+      card2.querySelector('p:nth-child(9) span').textContent = pokemon2.speed;
+    }
+
+    // Battle simulation logic
+    function calculateDamage(attacker, defender, move) {
+      const level = 50;
+      const isCritical = Math.random() < 0.0625; // 6.25% critical hit chance
+      const attackStat = move.isSpecial ? attacker.sp_attack : attacker.attack;
+      const defenseStat = move.isSpecial ? defender.sp_defense : defender.defense;
+      const typeEffectiveness = defender[`against_${move.type}`] || 1.0;
+
+      let damage = (((2 * level / 5 + 2) * attackStat * move.power / defenseStat) / 50) + 2;
+      damage *= typeEffectiveness;
+      if (isCritical) damage *= 2;
+
+      return Math.floor(damage);
+    }
+
+    function simulateBattle(pokemon1, pokemon2) {
+      let p1 = { ...pokemon1, currentHP: pokemon1.hp };
+      let p2 = { ...pokemon2, currentHP: pokemon2.hp };
+      let log = [];
+
+      const move1 = moveData[pokemon1.type1] || moveData.normal;
+      const move2 = moveData[pokemon2.type1] || moveData.normal;
+
+      while (p1.currentHP > 0 && p2.currentHP > 0) {
+        // Determine turn order
+        let first = p1.speed >= p2.speed ? p1 : p2;
+        let second = first === p1 ? p2 : p1;
+        let firstMove = first === p1 ? move1 : move2;
+        let secondMove = second === p1 ? move1 : move2;
+
+        // First Pokémon attacks
+        let damage = calculateDamage(first, second, firstMove);
+        second.currentHP = Math.max(0, second.currentHP - damage);
+        log.push(`${first.name} used ${firstMove.name}! ${second.name} took ${damage} damage. ${second.name} HP: ${second.currentHP}`);
+
+        if (second.currentHP <= 0) {
+          log.push(`${second.name} fainted! ${first.name} wins!`);
+          document.getElementById('winner').textContent = `Winner: ${first.name}`;
+          break;
+        }
+
+        // Second Pokémon attacks
+        damage = calculateDamage(second, first, secondMove);
+        first.currentHP = Math.max(0, first.currentHP - damage);
+        log.push(`${second.name} used ${secondMove.name}! ${first.name} took ${damage} damage. ${first.name} HP: ${first.currentHP}`);
+
+        if (first.currentHP <= 0) {
+          log.push(`${first.name} fainted! ${second.name} wins!`);
+          document.getElementById('winner').textContent = `Winner: ${second.name}`;
+          break;
+        }
+      }
+
+      return log;
+    }
+
+    function displayBattleLog(log) {
+      const battleLogDiv = document.getElementById('battle-log');
+      battleLogDiv.innerHTML = log.map(line => `<p>${line}</p>`).join('');
+    }
+
+    // Reset battle
+    document.getElementById('reset-battle').addEventListener('click', () => {
+      document.getElementById('selection-screen').classList.remove('hidden');
+      document.getElementById('results-screen').classList.add('hidden');
+      document.getElementById('pokemon1').value = '';
+      document.getElementById('pokemon2').value = '';
+      document.getElementById('start-battle').disabled = true;
+    });
+  </script>
+</body>
+</html>
