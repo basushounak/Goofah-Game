@@ -28,7 +28,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pokemon-battle-simulator:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/Goofah-Game:latest
 
       - name: Run container and test
         run: |
