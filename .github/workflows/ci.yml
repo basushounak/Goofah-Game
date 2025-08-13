@@ -28,11 +28,11 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/Goofah-Game:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/goofah-game:latest
 
       - name: Run container and test
         run: |
-          docker run -d -p 8080:80 --name test-container ${{ secrets.DOCKERHUB_USERNAME }}/Goofah-Game:latest
+          docker run -d -p 8080:80 --name test-container ${{ secrets.DOCKERHUB_USERNAME }}/goofah-game:latest
           sleep 5
           curl -f http://localhost:8080 || exit 1
           curl -f http://localhost:8080/pokemon.json || exit 1
