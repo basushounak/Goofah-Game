@@ -32,7 +32,7 @@ jobs:
 
       - name: Run container and test
         run: |
-          docker run -d -p 8080:80 --name test-container ${{ secrets.DOCKERHUB_USERNAME }}/pokemon-battle-simulator:latest
+          docker run -d -p 8080:80 --name test-container ${{ secrets.DOCKERHUB_USERNAME }}/Goofah-Game:latest
           sleep 5
           curl -f http://localhost:8080 || exit 1
           curl -f http://localhost:8080/pokemon.json || exit 1
